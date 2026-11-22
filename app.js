@@ -1035,7 +1035,7 @@ function ecranAdmin(a) {
           <div class="qui">
             <b>${esc(p.prenom)}</b>
             ${p.email ? `<span>${esc(p.email)}</span>` : ''}
-            ${p.souhaits ? `<span class="souhaits-admin">${esc(p.souhaits)}</span>` : '<span>Pas encore de liste de souhaits</span>'}
+            ${p.souhaits ? '' : '<span>Pas encore de liste de souhaits</span>'}
             ${tire ? `<span>${p.dans_tirage ? (p.vu ? 'A vu son résultat' : "N'a pas encore fait tourner la roue") : 'Hors tirage'}</span>` : ''}
           </div>
           <div class="actions">
@@ -1043,6 +1043,7 @@ function ecranAdmin(a) {
             <button class="icone" data-action="admin-renommer" data-id="${esc(p.id)}" data-prenom="${esc(p.prenom)}" aria-label="Corriger le prénom de ${esc(p.prenom)}">✎</button>
             ${tire ? '' : `<button class="icone" data-action="admin-supprimer" data-id="${esc(p.id)}" data-prenom="${esc(p.prenom)}" aria-label="Supprimer ${esc(p.prenom)}">✕</button>`}
           </div>
+          ${p.souhaits ? `<p class="souhaits-admin">${esc(p.souhaits)}</p>` : ''}
         </li>`).join('')}</ul>` : '<p class="doux">Personne ne s\'est encore inscrit. Partage le lien du site dans ton groupe.</p>'}
     </section>
     ${carteArrangements(a)}

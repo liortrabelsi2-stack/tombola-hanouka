@@ -399,9 +399,9 @@ input[type="datetime-local"] { color-scheme: dark; }
 .inscrits .qui b { display: block; overflow-wrap: anywhere; }
 .inscrits .qui span { display: block; font-size: .82rem; color: var(--doux); overflow-wrap: anywhere; }
 .inscrits .actions { display: flex; gap: 2px; }
-.inscrits .qui .souhaits-admin {
-  white-space: pre-wrap; color: var(--creme); font-size: .88rem; margin-top: 6px; padding: 8px 10px;
-  background: rgba(233, 196, 106, .08); border-left: 2px solid var(--or); border-radius: 0 8px 8px 0;
+.inscrits .souhaits-admin {
+  grid-column: 1 / -1; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem;
+  padding: 9px 12px; background: rgba(233, 196, 106, .08); border-left: 2px solid var(--or); border-radius: 0 10px 10px 0;
 }
 .icone {
   font: inherit; width: 36px; height: 36px; border-radius: 10px; border: 0; cursor: pointer;
