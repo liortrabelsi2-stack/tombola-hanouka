@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tombola de Hanouka</title>
+  <meta name="description" content="Inscris-toi, et à l'heure dite la roue de Hanouka te dira à qui offrir ton cadeau.">
+  <meta name="theme-color" content="#070b24">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101a4a'/%3E%3Cpath d='M32 10c5 7 8 11 8 16a8 8 0 0 1-16 0c0-5 3-9 8-16z' fill='%23e9c46a'/%3E%3Crect x='28' y='36' width='8' height='18' rx='2' fill='%23f7f1e3'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ciel" aria-hidden="true"></div>
+
+  <button id="son" class="bouton-son" type="button" aria-label="Couper ou remettre le son"></button>
+
+  <header class="entete">
+    <div id="logo" class="logo" aria-hidden="true"></div>
+    <p class="hebreu" lang="he" dir="rtl">חג חנוכה שמח</p>
+    <h1 id="titre">Tombola de Hanouka</h1>
+  </header>
+
+  <main id="app" class="app" aria-live="polite">
+    <p class="chargement">Les bougies s'allument…</p>
+  </main>
+
+  <footer class="pied">
+    <p>Huit lumières, un cadeau pour chacun.</p>
+  </footer>
+
+  <canvas id="confettis" aria-hidden="true"></canvas>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
