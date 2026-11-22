@@ -11,10 +11,9 @@ const app = $('#app');
 const ERREURS = {
   inscriptions_fermees: 'Les inscriptions sont closes.',
   prenom_invalide: 'Écris ton prénom (30 lettres au plus).',
-  email_invalide: "Cette adresse e-mail n'a pas l'air correcte.",
   souhaits_trop_longs: 'Ta liste est trop longue (600 caractères au plus).',
   complet: 'Le tirage est complet.',
-  deja_inscrit: 'Cette adresse e-mail est déjà inscrite. Ouvre ton lien personnel pour retrouver ta place.',
+  prenom_pris: 'Ce prénom est déjà inscrit. Si ce n\'est pas toi, ajoute l\'initiale de ton nom (par exemple « David B. »).',
   inconnu: 'Ce lien personnel est inconnu.',
   texte_invalide: 'Écris un message (300 caractères au plus).',
   trop_de_messages: 'Tu as déjà envoyé 40 messages dans cette conversation, c\'est le maximum.',
@@ -574,10 +573,7 @@ function ecranAccueil(d) {
       <h3>Je participe</h3>
       <form data-form="inscription" novalidate>
         <label>Ton prénom
-          <input name="prenom" autocomplete="given-name" maxlength="30" required placeholder="Comme les autres te connaissent">
-        </label>
-        <label>Ton e-mail <small>${EMAILS_ACTIFS ? "pour te prévenir à l'heure du tirage, " : ''}jamais montré aux autres</small>
-          <input name="email" type="email" autocomplete="email" inputmode="email" maxlength="120" required placeholder="toi@exemple.com">
+          <input name="prenom" autocomplete="given-name" maxlength="30" required placeholder="Comme les autres te connaissent" enterkeyhint="next">
         </label>
         <label>Tes idées de cadeaux <small>facultatif, tu pourras les changer</small>
           <textarea name="souhaits" maxlength="600" placeholder="Un livre, du chocolat, des chaussettes rigolotes…"></textarea>
@@ -908,7 +904,7 @@ async function envoyer(form, tache) {
 const FORMULAIRES = {
   inscription: (f) => envoyer(f, async (v) => {
     if (!v.prenom.trim()) throw new Error(ERREURS.prenom_invalide);
-    const r = await rpc('inscrire', { p_prenom: v.prenom, p_email: v.email, p_souhaits: v.souhaits });
+    const r = await rpc('inscrire', { p_prenom: v.prenom, p_souhaits: v.souhaits });
     etat.jeton = r.jeton;
     memoire.ecrire('tombola_jeton', r.jeton);
     history.replaceState(null, '', `?k=${r.jeton}`);
@@ -1038,7 +1034,7 @@ function ecranAdmin(a) {
                  aria-label="Valider ${esc(p.prenom)}">
           <div class="qui">
             <b>${esc(p.prenom)}</b>
-            <span>${esc(p.email)}</span>
+            ${p.email ? `<span>${esc(p.email)}</span>` : ''}
             ${p.souhaits ? '<span>A écrit une liste de souhaits</span>' : ''}
             ${tire ? `<span>${p.dans_tirage ? (p.vu ? 'A vu son résultat' : "N'a pas encore fait tourner la roue") : 'Hors tirage'}</span>` : ''}
           </div>
