@@ -17,7 +17,8 @@ const ERREURS = {
   deja_inscrit: 'Cette adresse e-mail est déjà inscrite. Ouvre ton lien personnel pour retrouver ta place.',
   inconnu: 'Ce lien personnel est inconnu.',
   texte_invalide: 'Écris un message (300 caractères au plus).',
-  trop_de_questions: 'Tu as déjà posé 10 questions, c\'est le maximum.',
+  trop_de_messages: 'Tu as déjà envoyé 40 messages dans cette conversation, c\'est le maximum.',
+  pas_de_tirage: 'Les messages s\'ouvrent après le tirage.',
   code_invalide: 'Code organisateur incorrect.',
   deja_tire: 'Le tirage a déjà eu lieu : on ne peut plus changer cela.',
   pas_assez: 'Il faut au moins 3 inscrits validés pour tirer au sort.',
@@ -99,6 +100,7 @@ const Son = {
     o.stop(t + duree + 0.05);
   },
   tic() { this.note(1150, 0, 0.035, 'triangle', 0.07); },
+  ding() { this.note(880, 0, 0.5, 'sine', 0.1); this.note(1318.51, 0.13, 0.8, 'sine', 0.08); },
   // Une note par bougie : gamme orientale qui monte vers la révélation
   bougie(k) {
     const gamme = [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 523.25, 587.33, 739.99];
@@ -357,6 +359,9 @@ const etat = {
   neuf: false,
   admin: null,
   codeAdmin: null,
+  nonLus: null,       // nombre de messages non lus au dernier passage
+  observateur: null,
+  voirMessages: false,
 };
 
 function maintenant() { return Date.now() + etat.decalage; }
@@ -480,24 +485,100 @@ function ecranRoue(d) {
     </section>`;
 }
 
-function fil(messages, moiQuiReponds) {
-  if (!messages.length) return '';
-  return `<ul class="fil">${messages.map(m => `<li>
-      <div class="bulle q">${esc(m.question)}</div>
-      ${m.reponse
-        ? `<div class="bulle r">${esc(m.reponse)}</div>`
-        : moiQuiReponds
-          ? `<form data-form="reponse" data-id="${esc(m.id)}">
-               <textarea name="texte" maxlength="300" required aria-label="Ta réponse" placeholder="Ta réponse…"></textarea>
-               <button class="bouton discret">Répondre</button>
-             </form>`
-          : '<div class="bulle attente">En attente de sa réponse…</div>'}
-    </li>`).join('')}</ul>`;
+/* ───────────────────────── Messages anonymes ───────────────────────── */
+const sansAccents = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Mots repérés dans la liste de souhaits → questions proposées
+const IDEES = [
+  ['livre|roman|bd|bande dessinee|manga|lecture', ['Quel genre de livre tu aimes lire ?', 'Un auteur ou une série que tu adores ?']],
+  ['chocolat', ['Chocolat noir, au lait ou blanc ?']],
+  ['bonbon|gateau|sucrerie|patisserie|douceur', ['Plutôt bonbons, chocolat ou gâteaux ?']],
+  ['pull|sweat|t-?shirt|chemise|vetement|pyjama|chaussette|echarpe|bonnet|gants?\\b|robe|jupe|pantalon|veste|manteau', ['Tu fais quelle taille ?', 'Quelle couleur tu portes le plus ?']],
+  ['chaussure|basket|sneaker|botte|chausson', ['Tu chausses du combien ?']],
+  ['parfum|eau de toilette', ['Plutôt parfum frais, sucré ou boisé ?']],
+  ['bougie', ['Quelle odeur de bougie tu préfères ?']],
+  ['jeux? de societe|puzzle|jeux? de cartes', ["Quels jeux de société tu as déjà ?"]],
+  ['jeux? video|console|switch|playstation|ps[45]|xbox|manette', ['Tu joues sur quelle console ?', 'Un jeu que tu attends ?']],
+  ['musique|ecouteur|casque|enceinte|airpods|vinyle', ['Quel style de musique tu écoutes ?']],
+  ['bijou|collier|bracelet|bague|boucles? d|montre', ['Plutôt or ou argent ?']],
+  ['sac\\b|sacs\\b|portefeuille|trousse', ['Plutôt sac à dos ou sac à main ?']],
+  ['the\\b|tisane|cafe|mug|tasse', ['Thé ou café ? Lequel tu préfères ?']],
+  ['cuisine|recette|ustensile|tablier', ["Qu'est-ce que tu aimes cuisiner ?"]],
+  ['sport|foot|ballon|maillot|tennis|velo|gym|course|running', ['Quel sport tu pratiques ?', 'Ton équipe préférée ?']],
+  ['maquillage|rouge a levres|vernis|creme|soin|cosmetique', ['Quelles marques de beauté tu utilises ?']],
+  ['plante|fleur|jardin', ['Plutôt une plante facile ou des fleurs ?']],
+  ['deco|cadre|poster|coussin|plaid', ['Quel style de déco tu as chez toi ?']],
+  ['siddour|tehilim|kippa|tall?it|mezouza|judaica|livre de priere|chabbat|hanoukia|bougeoir', ['Tu pries plutôt en rite séfarade ou ashkénaze ?', "Il te manque quoi pour Chabbat ?"]],
+  ['telephone|coque|chargeur|tablette|ordinateur|gadget', ['Tu as quel téléphone ?']],
+  ['peluche|jouet|lego|playmobil|poupee', ['Plutôt Lego, Playmobil ou peluche ?']],
+  ['voyage|valise|carte cadeau|restaurant|cinema|spectacle|sortie', ['Plutôt un objet ou une sortie ?']],
+].map(([motifs, questions]) => [new RegExp('\\b(?:' + motifs + ')'), questions]);
+
+const QUESTIONS_DE_BASE = ['Tu fais quelle taille ?', 'Ta couleur préférée ?', 'Sucré ou salé ?', "Qu'est-ce que tu n'aimes pas du tout ?", 'Tu as un hobby en ce moment ?'];
+const MOTS_AU_GATEUR = ["Merci d'avance !", "Un indice : en ce moment j'adore…", 'Surtout pas de…', 'Un petit rien me fera plaisir'];
+
+function suggestions(souhaits) {
+  const texte = sansAccents(souhaits || '');
+  const liste = [];
+  for (const [motif, questions] of IDEES) {
+    if (motif.test(texte)) for (const q of questions) liste.push({ texte: q, deListe: true });
+  }
+  if (!texte.trim()) liste.push({ texte: "Qu'est-ce qui te ferait vraiment plaisir ?" });
+  for (const q of QUESTIONS_DE_BASE) liste.push({ texte: q });
+  const vus = new Set();
+  return liste.filter(s => !vus.has(s.texte) && vus.add(s.texte)).slice(0, 7);
+}
+
+function compterNonLus(d) {
+  return [...(d.fil_cible || []), ...(d.fil_gateur || [])].filter(m => !m.de_moi && !m.lu).length;
+}
+
+function heureCourte(iso) {
+  return new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function puces(liste) {
+  return `<div class="puces">${liste.map(s => `<button type="button" class="puce${s.deListe ? ' de-liste' : ''}" data-action="puce" data-texte="${esc(s.texte)}">${s.deListe ? '<span aria-hidden="true">✦</span> ' : ''}${esc(s.texte)}</button>`).join('')}</div>`;
+}
+
+function bulles(mots, nomAutre) {
+  if (!mots.length) return '';
+  return `<ul class="fil">${mots.map(m => {
+    const nouveau = !m.de_moi && !m.lu;
+    return `<li class="${m.de_moi ? 'moi' : 'autre'}${nouveau ? ' nouveau' : ''}">
+      <div class="bulle ${m.de_moi ? 'r' : 'q'}">${esc(m.texte)}</div>
+      <span class="heure">${m.de_moi ? 'Toi' : esc(nomAutre)} · ${esc(heureCourte(m.cree_le))}${nouveau ? ' · <b>Nouveau</b>' : ''}</span>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+function carteConversation({ vers, titre, intro, mots, nomAutre, idees, aide, placeholder }) {
+  const nonLus = mots.filter(m => !m.de_moi && !m.lu).length;
+  return `<section class="carte" data-fil="${vers}">
+      <div class="rangee" style="justify-content:space-between;margin-bottom:6px">
+        <h3 style="margin:0">${titre}</h3>
+        ${nonLus ? `<span class="badge nouveau-badge">${nonLus} nouveau${nonLus > 1 ? 'x' : ''}</span>` : ''}
+      </div>
+      <p class="doux petit">${intro}</p>
+      ${bulles(mots, nomAutre)}
+      <form data-form="mot" data-vers="${vers}">
+        <p class="aide-puces">${aide}</p>
+        ${puces(idees)}
+        <textarea name="texte" maxlength="300" required aria-label="Ton message" placeholder="${placeholder}"></textarea>
+        <p class="erreur" role="alert"></p>
+        <div class="rangee fin"><button class="bouton discret">Envoyer en secret</button></div>
+      </form>
+    </section>`;
 }
 
 function ecranResultat(d) {
   const c = d.cible;
-  return `<section class="carte resultat${etat.neuf ? ' neuf' : ''}">
+  const nonLus = compterNonLus(d);
+  const idees = suggestions(c.souhaits);
+  return `${nonLus ? `<button class="alerte-messages" data-action="aller-messages">
+        <span class="point" aria-hidden="true"></span>Tu as ${nonLus} nouveau${nonLus > 1 ? 'x' : ''} message${nonLus > 1 ? 's' : ''} anonyme${nonLus > 1 ? 's' : ''}
+      </button>` : ''}
+    <section class="carte resultat${etat.neuf ? ' neuf' : ''}">
       <p class="surtitre">Chut, c'est un secret</p>
       <h2>${esc(d.prenom)}, tu offres un cadeau à</h2>
       <div class="nom-tire">${esc(c.prenom)}</div>
@@ -509,21 +590,47 @@ function ecranResultat(d) {
       </div>
       <button class="lien" data-action="revoir">Revoir la roue</button>
     </section>
-    <section class="carte">
-      <h3>Question anonyme à ${esc(c.prenom)}</h3>
-      <p class="doux petit">Une taille, une couleur préférée ? ${esc(c.prenom)} verra ta question, sans savoir qu'elle vient de toi.</p>
-      ${fil(d.mes_questions, false)}
-      <form data-form="question">
-        <textarea name="texte" maxlength="300" required aria-label="Ta question" placeholder="Écris ta question…"></textarea>
-        <p class="erreur" role="alert"></p>
-        <div class="rangee fin"><button class="bouton discret">Envoyer en secret</button></div>
-      </form>
-    </section>
-    ${d.questions_recues.length ? `<section class="carte">
-      <h3>La personne qui te gâte te demande</h3>
-      ${fil(d.questions_recues, true)}
-    </section>` : ''}
+    ${carteConversation({
+      vers: 'cible',
+      titre: `Message anonyme à ${esc(c.prenom)}`,
+      intro: `${esc(c.prenom)} lit tes messages et peut te répondre, sans savoir qu'ils viennent de toi.`,
+      mots: d.fil_cible, nomAutre: c.prenom, idees,
+      aide: idees.some(s => s.deListe) ? '✦ Idées tirées de sa liste de souhaits' : 'Une idée de question ?',
+      placeholder: 'Écris ta question…',
+    })}
+    ${carteConversation({
+      vers: 'gateur',
+      titre: 'La personne qui te gâte',
+      intro: "Quelqu'un a tiré ton prénom. Réponds à ses questions ou glisse-lui un indice : tu ne sais pas qui c'est.",
+      mots: d.fil_gateur, nomAutre: 'Anonyme', idees: MOTS_AU_GATEUR.map(texte => ({ texte })),
+      aide: 'Une idée de message ?',
+      placeholder: 'Écris-lui un message…',
+    })}
     ${carteSouhaits(d)}`;
+}
+
+// Un message devient « lu » quand il reste visible à l'écran un instant.
+function observerNonLus() {
+  etat.observateur?.disconnect();
+  const nouveaux = document.querySelectorAll('[data-fil] li.nouveau');
+  if (!nouveaux.length || !('IntersectionObserver' in window)) return;
+  const minuteries = new Map();
+  const faits = new Set();
+  etat.observateur = new IntersectionObserver((entrees) => {
+    for (const e of entrees) {
+      const vers = e.target.closest('[data-fil]').dataset.fil;
+      if (faits.has(vers)) continue;
+      if (e.isIntersecting) {
+        minuteries.set(vers, setTimeout(() => {
+          faits.add(vers);
+          rpc('marquer_lus', { p_jeton: etat.jeton, p_vers: vers }).catch(() => {});
+        }, 1500));
+      } else {
+        clearTimeout(minuteries.get(vers));
+      }
+    }
+  }, { threshold: 0.6 });
+  nouveaux.forEach(li => etat.observateur.observe(li));
 }
 
 function quelEcran(d) {
@@ -537,7 +644,7 @@ function quelEcran(d) {
 function dessiner() {
   const d = etat.donnees;
   $('#titre').textContent = d.titre;
-  document.title = d.titre;
+  document.title = (etat.nonLus ? `(${etat.nonLus}) ` : '') + d.titre;
   const ecran = quelEcran(d);
   app.innerHTML = { accueil: ecranAccueil, attente: ecranAttente, hors: ecranHorsTirage, roue: ecranRoue, resultat: ecranResultat }[ecran](d);
   if (ecran === 'roue') {
@@ -545,6 +652,7 @@ function dessiner() {
     preparer();
     document.fonts?.ready.then(() => { if ($('#roue') && !Roue.enCours) preparer(); });
   }
+  if (ecran === 'resultat') observerNonLus(); else etat.observateur?.disconnect();
   etat.neuf = false;
   majRebours();
 }
@@ -569,6 +677,13 @@ async function actualiser({ force = false } = {}) {
     return;
   }
   etat.decalage = new Date(d.maintenant).getTime() - Date.now();
+  const nonLus = etat.jeton && d.etat === 'tire' && d.participe ? compterNonLus(d) : 0;
+  if (etat.nonLus != null && nonLus > etat.nonLus) {
+    Son.ding();
+    toast('Nouveau message anonyme');
+  }
+  etat.nonLus = nonLus;
+  document.title = (nonLus ? `(${nonLus}) ` : '') + d.titre;
   const { maintenant: _, ...stable } = d;
   const empreinte = JSON.stringify(stable);
   if (!force && (empreinte === etat.empreinte || enSaisie() || Roue.enCours)) return;
@@ -608,14 +723,10 @@ const FORMULAIRES = {
     toast('Ta liste est enregistrée');
     await actualiser({ force: true });
   }),
-  question: (f) => envoyer(f, async (v) => {
-    await rpc('poser_question', { p_jeton: etat.jeton, p_texte: v.texte });
-    toast('Question envoyée en secret');
-    await actualiser({ force: true });
-  }),
-  reponse: (f) => envoyer(f, async (v) => {
-    await rpc('repondre', { p_jeton: etat.jeton, p_id: f.dataset.id, p_texte: v.texte });
-    toast('Réponse envoyée');
+  mot: (f) => envoyer(f, async (v) => {
+    await rpc('envoyer_mot', { p_jeton: etat.jeton, p_vers: f.dataset.vers, p_texte: v.texte });
+    f.reset();
+    toast('Message envoyé en secret');
     await actualiser({ force: true });
   }),
 };
@@ -644,6 +755,16 @@ const ACTIONS = {
       Son.fanfare();
       confettis();
     });
+  },
+  puce(b) {
+    const zone = b.closest('form').querySelector('textarea');
+    zone.value = b.dataset.texte.replace(/…$/, '');
+    zone.focus();
+    zone.setSelectionRange(zone.value.length, zone.value.length);
+  },
+  'aller-messages'() {
+    const carte = document.querySelector('[data-fil] li.nouveau')?.closest('[data-fil]');
+    carte?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
   revoir() {
     etat.forcerRoue = true;
@@ -722,6 +843,7 @@ function ecranAdmin(a) {
         </li>`).join('')}</ul>` : '<p class="doux">Personne ne s\'est encore inscrit. Partage le lien du site dans ton groupe.</p>'}
     </section>
     ${carteArrangements(a)}
+    ${carteConversationsAdmin(a)}
     <section class="carte">
       <h3>Lien à partager</h3>
       <div class="lien-perso"><code>${esc(location.origin + location.pathname)}</code>
@@ -730,6 +852,29 @@ function ecranAdmin(a) {
         ${a.etat === 'inscriptions' ? '<span></span>' : '<button class="bouton discret danger" data-action="admin-reinitialiser">Annuler le tirage et tout rouvrir</button>'}
         <button class="lien" data-action="admin-sortir">Se déconnecter</button>
       </div>
+    </section>`;
+}
+
+function carteConversationsAdmin(a) {
+  if (a.etat !== 'tire') return '';
+  const n = a.nb_messages;
+  const entete = `<div class="rangee" style="justify-content:space-between;margin-bottom:8px">
+      <h3 style="margin:0">Messages anonymes</h3><span class="badge">${n} message${n > 1 ? 's' : ''}</span></div>`;
+  if (!etat.voirMessages) {
+    return `<section class="carte">${entete}
+      <p class="doux petit">Tu peux lire toutes les conversations, sans que les participants le sachent. Attention : tu verras alors qui offre à qui pour ceux qui se sont écrit.</p>
+      <button class="bouton discret" data-action="admin-voir-messages" ${n ? '' : 'disabled'}>Lire les conversations</button>
+    </section>`;
+  }
+  const conv = a.messages || [];
+  return `<section class="carte">${entete}
+      ${conv.map(cv => `<div class="encart">
+        <h3>${esc(cv.de)} offre à ${esc(cv.a)}</h3>
+        <ul class="fil">${cv.mots.map(m => `<li class="${m.de_moi ? 'autre' : 'moi'}">
+          <div class="bulle ${m.de_moi ? 'q' : 'r'}">${esc(m.texte)}</div>
+          <span class="heure">${esc(m.de_moi ? cv.de : cv.a)} · ${esc(heureCourte(m.cree_le))}</span></li>`).join('')}</ul>
+      </div>`).join('')}
+      <button class="lien" data-action="admin-cacher-messages">Cacher les conversations</button>
     </section>`;
 }
 
@@ -768,6 +913,7 @@ async function actualiserAdmin({ force = false } = {}) {
   if (!etat.codeAdmin) { app.innerHTML = ecranConnexionAdmin(); return; }
   try {
     const a = await rpc('admin_etat', { p_code: etat.codeAdmin });
+    if (etat.voirMessages && a.etat === 'tire') a.messages = await rpc('admin_messages', { p_code: etat.codeAdmin });
     const { maintenant: _, ...stable } = a;
     const empreinte = JSON.stringify(stable);
     if (!force && (empreinte === etat.empreinte || enSaisie())) return;
@@ -816,6 +962,8 @@ Object.assign(FORMULAIRES, {
 });
 
 Object.assign(ACTIONS, {
+  'admin-voir-messages'() { etat.voirMessages = true; actualiserAdmin({ force: true }); },
+  'admin-cacher-messages'() { etat.voirMessages = false; actualiserAdmin({ force: true }); },
   'admin-hasard': () => confirm('Remettre toutes les paires au hasard ?') && admin('admin_forcer', { p_id: null, p_cible: null }, 'Tout est remis au hasard'),
   'admin-tout': () => admin('admin_valider', { p_id: null, p_valide: true }, 'Tous les inscrits sont validés'),
   'admin-lancer': () => confirm('Lancer le tirage maintenant entre les inscrits validés ?') && admin('admin_lancer', {}, 'Le tirage est fait'),
@@ -877,7 +1025,8 @@ function demarrer() {
     const d = etat.donnees;
     const echeancePassee = !modeAdmin() && d?.etat === 'inscriptions' && d.echeance
       && new Date(d.echeance).getTime() <= maintenant();
-    if (Date.now() - dernier > (echeancePassee ? 3000 : 20000)) {
+    const attente = echeancePassee ? 3000 : (d?.etat === 'tire' && etat.jeton) ? 10000 : 20000;
+    if (Date.now() - dernier > attente) {
       dernier = Date.now();
       rafraichir();
     }

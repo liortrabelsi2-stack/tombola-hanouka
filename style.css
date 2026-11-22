@@ -310,10 +310,39 @@ input[type="datetime-local"] { color-scheme: dark; }
   white-space: pre-wrap; overflow-wrap: anywhere; font-size: .95rem;
 }
 .bulle.q { background: rgba(36, 54, 138, .7); border: 1px solid rgba(143, 166, 255, .3); border-bottom-left-radius: 5px; justify-self: start; }
-.bulle.r { background: rgba(233, 196, 106, .16); border: 1px solid var(--trait); border-bottom-right-radius: 5px; justify-self: end; }
+.bulle.r { background: linear-gradient(180deg, rgba(233, 196, 106, .32), rgba(180, 134, 44, .26)); border: 1px solid rgba(233, 196, 106, .5); border-bottom-right-radius: 5px; justify-self: end; }
 .bulle.attente { background: none; border: 1px dashed var(--trait); color: var(--doux); font-size: .85rem; justify-self: end; }
 .fil form { grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
 .fil form textarea { min-height: 48px; }
+
+/* ───────── Conversations ───────── */
+.fil li.moi { justify-items: end; }
+.fil li.autre { justify-items: start; }
+.fil li.moi .heure { justify-self: end; }
+.heure { font-size: .72rem; color: var(--doux); padding: 0 6px; }
+.heure b { color: var(--or); }
+.fil li.nouveau .bulle { box-shadow: 0 0 0 2px var(--or), 0 0 26px -4px rgba(233, 196, 106, .65); }
+.aide-puces { font-size: .78rem; font-weight: 600; color: var(--or); margin: 0 0 -6px; }
+.puces { display: flex; flex-wrap: wrap; gap: 8px; }
+.puce {
+  font: inherit; font-size: .85rem; line-height: 1.3; color: var(--creme); text-align: left; cursor: pointer;
+  background: rgba(36, 54, 138, .45); border: 1px solid rgba(143, 166, 255, .3); border-radius: 999px; padding: 7px 13px;
+  transition: background .15s, transform .15s;
+}
+.puce:hover { background: rgba(36, 54, 138, .8); }
+.puce:active { transform: scale(.97); }
+.puce.de-liste { background: rgba(233, 196, 106, .13); border-color: rgba(233, 196, 106, .45); color: var(--or-clair); }
+.puce.de-liste:hover { background: rgba(233, 196, 106, .24); }
+.puce span { color: var(--or); }
+.nouveau-badge { background: var(--or); color: #2a1d02; border-color: var(--or); }
+.alerte-messages {
+  font: inherit; font-weight: 700; font-size: .98rem; color: #2a1d02; cursor: pointer; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(180deg, var(--or-clair), var(--or)); border: 0; border-radius: 18px; padding: 14px 18px;
+  box-shadow: 0 12px 30px -12px rgba(233, 196, 106, .8); animation: monte .5s cubic-bezier(.2, .8, .2, 1) both;
+}
+.alerte-messages .point { width: 10px; height: 10px; border-radius: 50%; background: #b3261e; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.5); opacity: .55; } }
 
 /* ───────── Organisateur ───────── */
 .badge {
