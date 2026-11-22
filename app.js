@@ -23,6 +23,9 @@ const ERREURS = {
   pas_assez: 'Il faut au moins 3 inscrits validés pour tirer au sort.',
   pas_possible: "Le tirage ne peut pas être lancé maintenant.",
   titre_invalide: 'Écris un titre (60 caractères au plus).',
+  soi_meme: 'Une personne ne peut pas s\'offrir un cadeau à elle-même.',
+  deja_choisi: 'Cette personne est déjà choisie pour quelqu\'un d\'autre.',
+  arrangement_impossible: 'Avec tes arrangements, le tirage est impossible. Change un choix.',
 };
 
 /* ───────────────────────── Outils ───────────────────────── */
@@ -681,7 +684,7 @@ function ecranAdmin(a) {
   return `<section class="carte">
       <div class="rangee" style="justify-content:space-between"><h2 style="margin:0">Organisation</h2>${badge}</div>
       <p class="doux petit" style="margin-top:10px">${tire
-        ? `Tirage fait ${esc(texteDate(a.tire_le))}. Personne, pas même toi, ne peut voir qui offre à qui.`
+        ? `Tirage fait ${esc(texteDate(a.tire_le))}. ${a.participants.some(p => p.force_cible_id) ? 'En dehors des paires que tu as choisies, personne ne peut voir qui offre à qui.' : 'Personne, pas même toi, ne peut voir qui offre à qui.'}`
         : a.etat === 'en_retard'
           ? "L'heure est passée mais il y avait moins de 3 inscrits validés. Valide les inscrits, puis lance le tirage."
           : "À l'échéance, le tirage se lance tout seul entre les inscrits que tu as validés. Les inscrits ne savent pas qu'ils attendent ta validation."}</p>
@@ -718,6 +721,7 @@ function ecranAdmin(a) {
           </div>
         </li>`).join('')}</ul>` : '<p class="doux">Personne ne s\'est encore inscrit. Partage le lien du site dans ton groupe.</p>'}
     </section>
+    ${carteArrangements(a)}
     <section class="carte">
       <h3>Lien à partager</h3>
       <div class="lien-perso"><code>${esc(location.origin + location.pathname)}</code>
@@ -726,6 +730,37 @@ function ecranAdmin(a) {
         ${a.etat === 'inscriptions' ? '<span></span>' : '<button class="bouton discret danger" data-action="admin-reinitialiser">Annuler le tirage et tout rouvrir</button>'}
         <button class="lien" data-action="admin-sortir">Se déconnecter</button>
       </div>
+    </section>`;
+}
+
+function carteArrangements(a) {
+  if (a.etat === 'tire') return '';
+  const v = a.participants.filter(p => p.valide);
+  if (v.length < 2) {
+    return `<section class="carte"><h3>Arrangements secrets</h3>
+      <p class="doux petit">Valide d'abord les inscrits : tu pourras ensuite choisir toi-même qui offre à qui.</p></section>`;
+  }
+  const pris = new Map(v.filter(p => p.force_cible_id).map(p => [p.force_cible_id, p.id]));
+  const choisis = v.filter(p => p.force_cible_id && v.some(c => c.id === p.force_cible_id)).length;
+  return `<section class="carte">
+      <div class="rangee" style="justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Arrangements secrets</h3>
+        ${choisis ? '<button class="bouton discret" data-action="admin-hasard">Tout au hasard</button>' : ''}
+      </div>
+      <p class="doux petit">Choisis à qui offre chaque personne. Ceux que tu laisses « au hasard » seront tirés normalement. Sur leur écran, la roue tourne comme d'habitude : personne ne voit la différence.</p>
+      ${a.arrangement_ok ? '' : '<p class="erreur">Avec ces choix, il ne reste qu\'une personne à tirer et elle ne peut tomber que sur elle-même. Change un choix.</p>'}
+      <ul class="arrangements">${v.map(p => `<li>
+        <span class="qui-offre">${esc(p.prenom)}</span>
+        <span class="fleche" aria-hidden="true">offre à</span>
+        <select data-forcer="${esc(p.id)}" aria-label="${esc(p.prenom)} offre à">
+          <option value="">Au hasard</option>
+          ${v.filter(c => c.id !== p.id).map(c => {
+            const occupe = pris.has(c.id) && pris.get(c.id) !== p.id;
+            return `<option value="${esc(c.id)}"${p.force_cible_id === c.id ? ' selected' : ''}${occupe ? ' disabled' : ''}>${esc(c.prenom)}${occupe ? ' (déjà choisi)' : ''}</option>`;
+          }).join('')}
+        </select>
+      </li>`).join('')}</ul>
+      ${choisis ? `<p class="doux petit" style="margin-top:12px">${choisis} paire${choisis > 1 ? 's' : ''} choisie${choisis > 1 ? 's' : ''}, ${v.length - choisis} au hasard.</p>` : ''}
     </section>`;
 }
 
@@ -781,6 +816,7 @@ Object.assign(FORMULAIRES, {
 });
 
 Object.assign(ACTIONS, {
+  'admin-hasard': () => confirm('Remettre toutes les paires au hasard ?') && admin('admin_forcer', { p_id: null, p_cible: null }, 'Tout est remis au hasard'),
   'admin-tout': () => admin('admin_valider', { p_id: null, p_valide: true }, 'Tous les inscrits sont validés'),
   'admin-lancer': () => confirm('Lancer le tirage maintenant entre les inscrits validés ?') && admin('admin_lancer', {}, 'Le tirage est fait'),
   'admin-renommer'(b) {
@@ -817,6 +853,8 @@ app.addEventListener('click', (e) => {
 app.addEventListener('change', (e) => {
   const c = e.target.closest('[data-valider]');
   if (c) admin('admin_valider', { p_id: c.dataset.valider, p_valide: c.checked });
+  const s = e.target.closest('[data-forcer]');
+  if (s) admin('admin_forcer', { p_id: s.dataset.forcer, p_cible: s.value || null });
 });
 
 function rafraichir(options) {
