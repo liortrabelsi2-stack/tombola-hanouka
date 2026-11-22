@@ -1035,7 +1035,7 @@ function ecranAdmin(a) {
           <div class="qui">
             <b>${esc(p.prenom)}</b>
             ${p.email ? `<span>${esc(p.email)}</span>` : ''}
-            ${p.souhaits ? '<span>A écrit une liste de souhaits</span>' : ''}
+            ${p.souhaits ? `<span class="souhaits-admin">${esc(p.souhaits)}</span>` : '<span>Pas encore de liste de souhaits</span>'}
             ${tire ? `<span>${p.dans_tirage ? (p.vu ? 'A vu son résultat' : "N'a pas encore fait tourner la roue") : 'Hors tirage'}</span>` : ''}
           </div>
           <div class="actions">
